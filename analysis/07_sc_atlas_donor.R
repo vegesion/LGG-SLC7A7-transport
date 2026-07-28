@@ -55,3 +55,30 @@ ggplot2::ggsave(file.path(DIR_FIGURES, "Fig5D_SLC3A2_donor.pdf"),
 saveRDS(seu, file.path(DIR_DATA_PROC, "seurat_gbmap_scored.rds"))
 saveRDS(auc, file.path(DIR_DATA_PROC, "score_auc.rds"))
 message("완료: Fig5")
+
+
+
+
+"=================="
+
+# add ---------------------------------------------------------------------
+
+#12개 중 7개 양수, 5개 음수(Mathewson2021은 −0.614). 이건 "일관되게 재현됨"이 아니라 이질적입니다.
+#최소 donor 수를 8~10으로 올리고 랜덤효과 메타 + I²로 다시 계산하세요.
+
+per <- r$meta$per_dataset
+per <- per[per$n >= 8, ]                       # 소표본 dataset 제외
+w  <- 1/per$se^2; b <- sum(w*per$beta)/sum(w)
+Q  <- sum(w*(per$beta - b)^2); df <- nrow(per) - 1
+tau2 <- max(0, (Q - df)/(sum(w) - sum(w^2)/sum(w)))   # DerSimonian–Laird
+wr <- 1/(per$se^2 + tau2); br <- sum(wr*per$beta)/sum(wr); ser <- sqrt(1/sum(wr))
+c(beta = br, se = ser, p = 2*pnorm(-abs(br/ser)), I2 = max(0,(Q-df)/Q)*100, k = nrow(per))
+
+
+# 순환논리 점검 -----------------------------------------------------------------
+
+tr_noself <- setdiff(tr_set, GENE_OF_INTEREST)
+auc2 <- score_auc(seu, list(transport_ns = tr_noself))
+seu$AUC_transport_ns <- auc2[, "transport_ns"]
+r2 <- donor_continuous_test(seu, "AUC_transport_ns")
+print(r2$mixed_coef)     # 이 값이 진짜 효과
