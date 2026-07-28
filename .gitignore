@@ -1,0 +1,27 @@
+# R session
+.Rhistory
+.RData
+.Rproj.user/
+.Ruserdata
+# secrets
+.Renviron
+# data & large outputs (git 미추적)
+data/raw/*
+data/processed/*
+!data/**/README.md
+!data/**/.gitkeep
+results/*
+figures/*
+!results/.gitkeep
+!figures/.gitkeep
+# OS
+.DS_Store
+Thumbs.db
+
+# renv (renv.lock 은 커밋, 로컬 라이브러리/캐시는 제외)
+renv/library/
+renv/local/
+renv/cellar/
+renv/staging/
+renv/python/
+renv/sandbox/
