@@ -71,7 +71,19 @@ seu$donor_group <- ifelse(seu$donor_id %in% hi, "SLC7A7_high", "SLC7A7_low")
 set.seed(SUBSAMPLE_SEED)
 cells <- unlist(lapply(c("SLC7A7_high","SLC7A7_low"), function(g) {
   cl <- colnames(seu)[seu$donor_group == g]; sample(cl, min(CELLCHAT_SUBSAMPLE, length(cl))) }))
-seu_cc <- subset(seu, cells = cells); seu_cc$cellchat_group <- as.character(seu_cc$cell_type)
+seu_cc <- subset(seu, cells = cells)
+# CellChat 실행 전에 — 두 군 모두에서 최소 세포 수를 만족하는 cell type만 유지
+min_cells <- 50
+tab <- table(seu_cc$cell_type, seu_cc$donor_group)
+keep_ct <- rownames(tab)[apply(tab, 1, min) >= min_cells]
+message("유지(", length(keep_ct), "): ", paste(keep_ct, collapse = ", "))
+message("제외: ", paste(setdiff(rownames(tab), keep_ct), collapse = ", "))
+print(tab[setdiff(rownames(tab), keep_ct), , drop = FALSE])   # 몇 개였는지 기록용
+
+seu_cc <- subset(seu_cc, subset = cell_type %in% keep_ct)
+
+# ★ 핵심: character 가 아니라 '레벨을 고정한 factor' 로 지정 → 두 객체 차원이 강제로 일치
+seu_cc$cellchat_group <- factor(as.character(seu_cc$cell_type), levels = keep_ct)
 
 cc_hi <- run_cellchat(subset(seu_cc, subset = donor_group == "SLC7A7_high"))
 cc_lo <- run_cellchat(subset(seu_cc, subset = donor_group == "SLC7A7_low"))

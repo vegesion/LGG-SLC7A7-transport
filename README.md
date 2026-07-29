@@ -52,7 +52,7 @@ source(here::here("R", "setup.R"))     # 모든 스크립트 공통 첫 줄
 | 04 | `04_multicohort_validation.R` | **Fig 3** | TCGA/CGGA 693+325 KM · time-dep ROC · DCA · **IDH 보정/층화** |
 | 05 | `05_bulk_clinical_gsea_decon.R` | **Fig 4** | 임상 상관 · GSEA · **면역 deconvolution + myeloid 보정** |
 | 06 | `06_sc_preprocess_gbmap.R` | — | GBmap → Seurat v5 (BPCells 온디스크) |
-| 07 | `07_sc_atlas_donor.R` | **Fig 5** | atlas UMAP · AUCell(수송) · SLC3A2 공발현(depth 보정) |
+| 07 | `07_sc_atlas_donor.R` | **Fig 5** | atlas UMAP · UCell(수송) · SLC3A2 공발현(depth 보정) |
 | 08 | `08_sc_myeloid_donor.R` | **Fig 6** | **donor 수준 발현 vs 아종 비율 회귀** · MG vs MDM · pseudobulk DEG/GSEA |
 | 09 | `09_trajectory_cellchat.R` | **Fig 7** | Monocle3(**연속값 투영**) · Slingshot · CellChat(donor high/low) |
 | 10 | `10_spatial.R` | **Fig 8** | 공간 분포 · niche · **spot 수준 SLC7A7 vs ASS1** |
@@ -65,7 +65,7 @@ source(here::here("R", "setup.R"))     # 모든 스크립트 공통 첫 줄
 1. **분석 단위는 donor** — 33만 세포 단위 검정은 pseudoreplication 으로 p 가 무의미해진다.
 2. **발현은 연속값** — 세포 단위 +/- 이분은 sequencing depth 와 교란되므로 main figure 에서 제외.
 3. **depth 보정 내장** — donor 수준 회귀에 `nFeature_RNA` 를 공변량으로, gene set 점수는
-   순위 기반 **AUCell**(depth 강건) 사용.
+   순위 기반 **UCell**(depth 강건) 사용.
 4. **모듈 점수에서 self-gene 제외** — SLC7A7 로 그룹을 나눈 뒤 SLC7A7 이 포함된 모듈을
    비교하는 순환논리를 차단.
 

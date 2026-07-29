@@ -15,7 +15,7 @@ message("배치 컬럼: ", ds_col)
 
 df <- data.frame(expr = FetchData(obj, vars = GENE_OF_INTEREST)[, 1],
                  depth = obj[[DEPTH_COVARIATE]][, 1],
-                 donor = obj$donor_id[, 1],
+                 donor = obj$donor_id,
                  dataset = as.character(obj[[ds_col]][, 1]))
 agg <- df %>% dplyr::group_by(dataset, donor) %>%
   dplyr::summarise(expr = mean(expr), depth = mean(depth), n = dplyr::n(), .groups = "drop") %>%
