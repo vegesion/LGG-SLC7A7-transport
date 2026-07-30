@@ -121,12 +121,12 @@ ROC_TIMES    <- c(12, 36, 60)
 # ── 단일세포: donor 수준 분석 ────────────────────────────────────────────────
 SC_DONOR_MIN_CELLS <- 20
 AUCELL_SEED        <- 42
-DEPTH_COVARIATE    <- "nFeature_RNA"
+DEPTH_COVARIATE    <- "nCount_RNA"
 CELLCHAT_SUBSAMPLE <- 20000
 SC_BATCH_CANDIDATES <- c("dataset","author","study","batch","sample_source")
 
 # ── 공간전사체 ───────────────────────────────────────────────────────────────
-DIR_SPATIAL <- file.path(DIR_DATA_RAW, "spatial")
+DIR_SPATIAL <- file.path(DIR_DATA_RAW, "spatial_data_visium")
 
 # ── 생존분석 임계값 / Survival thresholds ────────────────────────────────────
 # EPV(events-per-variable) >= 10 원칙에 따른 최소 이벤트 수.
@@ -157,7 +157,7 @@ MR_CIS_WINDOW      <- 1e6    # cis-eQTL 창 (±1 Mb)
 MR_FSTAT_MIN       <- 10     # weak instrument 제거
 MR_OUTCOMES <- list(
   brain_tumor_eu = list(id = "ebi-a-GCST90018800", n = 491542),  # brain tumor (European)
-  brain_tumor_as = list(id = "ebi-a-GCST90018580", n = NA),      # brain tumor (Asian)
+  brain_tumor_as = list(id = "ebi-a-GCST90018580", n = 178726),      # brain tumor (Asian)
   gbm            = list(id = "finn-b-C3_GBM_EXALLC", n = 174097)  # glioblastoma (FinnGen)
 )
 MR_EQTL_EXPOSURE_N <- 31684  # eQTLGen exposure sample size (Steiger용 fallback)
