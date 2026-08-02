@@ -6,28 +6,38 @@
 #       대사 gene set 만 쓰면 y+L/CAT 계열이 구조적으로 누락된다.
 # =============================================================================
 
-build_transporter_geneset <- function(manual = TRANSPORTER_MANUAL,
-                                      msig_sets = MSIGDB_TRANSPORT_SETS,
+build_transporter_geneset <- function(msig_sets = MSIGDB_TRANSPORT_SETS,
                                       universe = NULL) {
   msig <- dplyr::bind_rows(
     msigdbr::msigdbr(species = "Homo sapiens", category = "C5", subcategory = "GO:BP"),
     msigdbr::msigdbr(species = "Homo sapiens", category = "C2", subcategory = "CP:REACTOME")
   )
   from_msig <- msig %>% dplyr::filter(gs_name %in% msig_sets)
-  genes <- sort(unique(c(from_msig$gene_symbol, manual)))
+  genes <- sort(unique(c(from_msig$gene_symbol)))
   if (!is.null(universe)) genes <- intersect(genes, universe)
 
   prov <- data.frame(gene = genes,
-                     manual = genes %in% manual,
                      msigdb = genes %in% from_msig$gene_symbol, stringsAsFactors = FALSE)
   attr(genes, "provenance") <- prov
-  message("transporter gene set: ", length(genes), " genes (manual ",
-          sum(prov$manual), " / MSigDB ", sum(prov$msigdb), ")")
+  message("transporter gene set: ", length(genes)," / MSigDB ", sum(prov$msigdb), ")")
   genes
 }
 
-build_arg_enzyme_geneset <- function(manual = ARG_ENZYME_SET, universe = NULL) {
-  g <- sort(unique(manual)); if (!is.null(universe)) g <- intersect(g, universe); g
+build_arg_enzyme_geneset <- function(msig_sets = ARG_ENZYME_SET, universe = NULL) {
+  
+  msig <- dplyr::bind_rows(
+    msigdbr::msigdbr(species = "Homo sapiens", category = "C5", subcategory = "GO:BP"),
+    msigdbr::msigdbr(species = "Homo sapiens", category = "C2", subcategory = "CP:REACTOME")
+  )
+  from_msig <- msig %>% dplyr::filter(gs_name %in% msig_sets)
+  genes <- sort(unique(c(from_msig$gene_symbol)))
+  if (!is.null(universe)) genes <- intersect(genes, universe)
+  
+  prov <- data.frame(gene = genes,
+                     msigdb = genes %in% from_msig$gene_symbol, stringsAsFactors = FALSE)
+  attr(genes, "provenance") <- prov
+  message("arg metabolic gene set: ", length(genes)," / MSigDB ", sum(prov$msigdb), ")")
+  genes
 }
 
 get_msig_genes <- function(gs_name, category = "H", subcategory = NULL) {

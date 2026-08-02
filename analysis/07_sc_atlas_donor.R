@@ -7,6 +7,8 @@ source(here::here("R", "setup.R"))
 suppressPackageStartupMessages({ library(Seurat); library(UCell); library(ggpubr) })
 
 seu <- readRDS(file.path(DIR_DATA_PROC, "seurat_gbmap.rds"))
+microglia <- readRDS(file.path(DIR_DATA_PROC, "microglia.rds"))
+
 ggplot2::ggsave(file.path(DIR_FIGURES, "Fig5A_umap_celltype.pdf"),
   DimPlot(seu, group.by = "cell_type", label = TRUE, raster = TRUE) + theme_paper(), width = 7, height = 6)
 ggplot2::ggsave(file.path(DIR_FIGURES, "Fig5B_umap_gene.pdf"),
@@ -25,22 +27,26 @@ ggplot2::ggsave(file.path(DIR_FIGURES, "Fig5C_celltype_donor.pdf"),
     ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)), width = 7, height = 5)
 
 ## AUCell (depth 강건) + donor 연속 검정
-tr_set <- build_transporter_geneset(universe = rownames(seu))
-auc <- score_auc(seu, list(transport = tr_set,
+tr_set <- build_transporter_geneset(universe = rownames(microglia))
+auc <- score_auc(microglia, list(transport = tr_set,
                            arg_enzyme = build_arg_enzyme_geneset(universe = rownames(seu))))
-seu$AUC_transport <- auc[, "transport"]; seu$AUC_argenzyme <- auc[, "arg_enzyme"]
+microglia$AUC_transport <- auc[, "transport"]; microglia$AUC_argenzyme <- auc[, "arg_enzyme"]
 
-r <- donor_continuous_test(seu, "AUC_transport")
+r <- donor_continuous_test(microglia, "AUC_transport")
 print(r$coef); if (!is.null(r$mixed_coef)) print(r$mixed_coef)
 cat(sprintf("within-dataset meta: beta=%.4g, se=%.4g, p=%.3g (%s datasets)\n",
             r$meta$pooled, r$meta$se, r$meta$p, r$meta$n_dataset))
-write_result(r$data, "Fig5_donor_AUC_transport.csv")
-write_result(r$meta$per_dataset, "Fig5_within_dataset_meta.csv")
+write_result(r$data, "Fig5_donor_AUC_transport_microglia.csv")
+write_result(r$meta$per_dataset, "Fig5_within_dataset_meta_microglia.csv")
 
-## SLC3A2 공발현 (화학량론) — donor 수준 + depth 보정
-part <- data.frame(slc7a7 = FetchData(seu, vars = GENE_OF_INTEREST)[, 1],
-                   slc3a2 = if (GENE_PARTNER %in% rownames(seu)) FetchData(seu, vars = GENE_PARTNER)[, 1] else NA,
-                   depth = seu[[DEPTH_COVARIATE]][, 1], donor = seu$donor_id) %>%
+saveRDS(microglia, file.path(DIR_DATA_PROC, "microglia_scored.rds"))
+saveRDS(auc, file.path(DIR_DATA_PROC, "score_auc_microglia.rds"))
+
+seurat <- microglia # 분석 데이터에 따라 변경
+## SLC3A2 공발현 (화학량론) — donor 수준 + depth 보정 +  net.cell
+part <- data.frame(slc7a7 = FetchData(seurat, vars = GENE_OF_INTEREST)[, 1],
+                   slc3a2 = if (GENE_PARTNER %in% rownames(seurat)) FetchData(seurat, vars = GENE_PARTNER)[, 1] else NA,
+                   depth = seurat[[DEPTH_COVARIATE]][, 1], donor = seurat$donor_id) %>%
   dplyr::group_by(donor) %>%
   dplyr::summarise(dplyr::across(c(slc7a7, slc3a2, depth), mean), n = dplyr::n(), .groups = "drop") %>%
   dplyr::filter(n >= SC_DONOR_MIN_CELLS)
@@ -52,8 +58,7 @@ ggplot2::ggsave(file.path(DIR_FIGURES, "Fig5D_SLC3A2_donor.pdf"),
     ggplot2::labs(x = paste(GENE_OF_INTEREST, "(donor)"), y = paste(GENE_PARTNER, "(donor)")) +
     theme_paper(), width = 4.6, height = 4.4)
 
-saveRDS(seu, file.path(DIR_DATA_PROC, "seurat_gbmap_scored.rds"))
-saveRDS(auc, file.path(DIR_DATA_PROC, "score_auc.rds"))
+
 message("완료: Fig5")
 
 

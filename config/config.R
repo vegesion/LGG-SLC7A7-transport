@@ -18,12 +18,12 @@ GENE_OF_INTEREST <- "SLC7A7"   # 사전지정 후보 (y+LAT1)
 GENE_PARTNER     <- "SLC3A2"   # 이형이합체 파트너 (4F2hc)
 GENE_FAMILY      <- "SLC"      # 스크리닝 대상 접두사
 
-TRANSPORTER_MANUAL <- c("SLC7A1","SLC7A2","SLC7A3","SLC7A6","SLC7A7","SLC7A11",
-                        "SLC3A2","SLC7A5","SLC38A2","SLC1A5","SLC6A14")
-MSIGDB_TRANSPORT_SETS <- c("GOBP_ARGININE_TRANSPORT",
+MSIGDB_TRANSPORT_SETS <- c("GOBP_L_ARGININE_IMPORT_ACROSS_PLASMA_MEMBRANE",
                            "GOBP_L_AMINO_ACID_TRANSPORT",
-                           "REACTOME_AMINO_ACID_TRANSPORT_ACROSS_THE_PLASMA_MEMBRANE")
-ARG_ENZYME_SET <- c("ASS1","ASL","ARG1","ARG2","NOS2","OTC","ODC1","SRM","SMS","AZIN1")
+                           "GOBP_L_ARGININE_TRANSMEMBRANE_TRANSPORT")
+ARG_ENZYME_SET <- c("GOBP_ARGININE_METABOLIC_PROCESS",
+                    "GOBP_L_ARGININE_BIOSYNTHETIC_PROCESS",
+                    "GOBP_L_ARGININE_CATABOLIC_PROCESS")
 
 # ── 디렉터리 / Directories (all relative to project root) ────────────────────
 DIR_DATA_RAW   <- here("data", "raw")        # 원본 데이터 (git 미추적)

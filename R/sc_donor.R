@@ -72,11 +72,13 @@ donor_continuous_test <- function(obj, outcome, gene = GENE_OF_INTEREST,
                                   adjust_depth = TRUE, mixed = TRUE) {
   agg <- donor_table(obj, outcome, gene)
   form <- if (adjust_depth) outcome ~ gene + depth else outcome ~ gene
+
   fit_lm <- stats::lm(form, data = agg)
 
   fit_mm <- NULL
   if (mixed && dplyr::n_distinct(agg$dataset) > 2 && requireNamespace("lme4", quietly = TRUE)) {
     f <- if (adjust_depth) outcome ~ gene + depth + (1 | dataset) else outcome ~ gene + (1 | dataset)
+
     fit_mm <- try(if (requireNamespace("lmerTest", quietly = TRUE))
                     lmerTest::lmer(f, data = agg) else lme4::lmer(f, data = agg), silent = TRUE)
     if (inherits(fit_mm, "try-error")) fit_mm <- NULL
@@ -84,8 +86,8 @@ donor_continuous_test <- function(obj, outcome, gene = GENE_OF_INTEREST,
   list(data = agg, lm = fit_lm, coef = summary(fit_lm)$coefficients,
        mixed = fit_mm, mixed_coef = if (is.null(fit_mm)) NULL else summary(fit_mm)$coefficients,
        meta = meta_within_dataset(agg, adjust_depth),
-       spearman = stats::cor.test(agg$gene, agg$outcome, method = "spearman"))
-}
+       spearman = stats::cor.test(agg$gene, agg$outcome, method = "spearman"))}
+
 
 # within-dataset 추정 → 역분산 가중 메타분석 (배치 지배적일 때의 방어적 근거)
 meta_within_dataset <- function(agg, adjust_depth = TRUE, min_n = 4) {

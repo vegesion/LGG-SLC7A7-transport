@@ -22,7 +22,7 @@ df_filtered <- dplyr::filter(df_slc, overall_p <= 0.05, mut_p <= 0.05, wt_p <= 0
 ensembl_list <- stats::na.omit(df_filtered$ENSEMBL)
 
 # outcome 선택 (config의 MR_OUTCOMES)
-outcome  <- MR_OUTCOMES$gbm
+outcome  <- MR_OUTCOMES$brain_tumor_as
 mart     <- connect_mart()
 
 # TwoSampleMR
@@ -34,7 +34,7 @@ plt         <- do.call(rbind, lapply(mr_res_list, function(x) x$pleiotropy))
 presso      <- do.call(rbind, lapply(mr_res_list, function(x) x$presso_summary))
 loo         <- do.call(rbind, lapply(mr_res_list, function(x) x$leaveoneout))
 
-write_result(mr_results, "MR_results_SLC_GBM.csv")
+write_result(mr_results, "MR_results_SLC_braintumor_asian.csv")
 write_result(het,        "MR_heterogeneity.csv")
 write_result(steiger,    "MR_steiger.csv")
 write_result(plt,        "MR_pleiotropy.csv")

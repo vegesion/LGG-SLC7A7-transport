@@ -13,8 +13,8 @@ suppressPackageStartupMessages({
 
 # ── (a) Volcano ──────────────────────────────────────────────────────────────
 fc_cut <- 0.15; p_cut <- 0.05
-df <- readr::read_csv(file.path(DIR_RESULTS,
-        paste0(GENE_OF_INTEREST, "_DEG_microglia_pseudobulk.csv")), show_col_types = FALSE)
+df <- readr::read_csv(file.path(DIR_RESULTS, "Fig6_pseudobulk_DEG_limma.csv"), show_col_types = FALSE)
+colnames(df)[1] <- "gene"
 df <- dplyr::filter(df, !grepl("^ENSG", gene))
 df$mlog10P <- -log10(df$adj.P.Val)
 df$mlog10P[is.infinite(df$mlog10P)] <- 300
@@ -29,9 +29,16 @@ volcano <- ggplot(df, aes(logFC, mlog10P, color = Significance)) +
   geom_vline(xintercept = c(-fc_cut, fc_cut), linetype = 5, linewidth = 0.6) +
   geom_hline(yintercept = -log10(p_cut), linetype = 5, linewidth = 0.6) +
   labs(x = "log2(FC)", y = "-log10(adj.P)") +
-  theme_bw() + theme(aspect.ratio = 1, panel.grid = element_blank()) +
-  theme_blank_frame(keep_grid_x = FALSE)   # 논문용: 텍스트 제거
-save_tiff(volcano, "volcano_SLC7A7_microglia.tiff", width = 7, height = 7)
+  theme_bw()
+
+save_tiff(volcano, "Fig6_pseudobulk_volcano.tiff", width = 7, height = 7)
+save_emf(volcano, "Fig6_pseudobulk_volcano.emf")
+
+
+
+
+# OVA (GO enrichment analysis) --------------------------------------------
+
 
 # ── (b) myeloid 3종 SLC7A7 violin (통계표 포함) ──────────────────────────────
 myeloid <- readRDS(file.path(DIR_DATA_PROC, "myeloid.rds"))   # 05에서 저장

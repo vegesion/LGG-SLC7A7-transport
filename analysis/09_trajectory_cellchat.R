@@ -7,9 +7,10 @@
 source(here::here("R", "setup.R"))
 suppressPackageStartupMessages({
   library(Seurat); library(monocle3); library(slingshot); library(SingleCellExperiment)
-  library(CellChat) })
+  library(CellChat); library(harmony) })
 
-mg <- readRDS(file.path(DIR_DATA_PROC, "microglia.rds"))
+mg <- readRDS(file.path(DIR_DATA_PROC, "microglia_scored.rds"))
+
 set.seed(SUBSAMPLE_SEED)
 sm <- mg
 if ("annotation_level_4" %in% colnames(sm@meta.data))
@@ -31,6 +32,13 @@ hm <- intersect(c("P2RY12","TMEM119","CX3CR1","SALL1","MEF2C"), rownames(cds))
 cds$homeo <- colMeans(as.matrix(exprs(cds)[hm, , drop = FALSE]))
 root_cl <- names(sort(tapply(cds$homeo, monocle3::clusters(cds), mean), decreasing = TRUE))[1]
 cds <- order_cells(cds, root_cells = colnames(cds)[monocle3::clusters(cds) == root_cl])
+
+colData(cds)$ARGININE_TRANSPORT <-
+  microglia@meta.data[colnames(cds_microglia), "AUC_transport"]
+
+colData(cds)$ARGININE_METABOLISM <-
+  microglia@meta.data[colnames(cds_microglia), "AUC_argenzyme"]
+
 colData(cds)$pseudotime <- pseudotime(cds)
 saveRDS(cds, file.path(DIR_DATA_PROC, "cds_microglia.rds"))
 
@@ -39,10 +47,22 @@ ggplot2::ggsave(file.path(DIR_FIGURES, "Fig7A_monocle3_gene_continuous.pdf"),
   plot_cells(cds, genes = GENE_OF_INTEREST, cell_size = .6, label_cell_groups = FALSE,
              label_leaves = FALSE, label_branch_points = FALSE, label_roots = FALSE) +
     ggplot2::scale_color_viridis_c(), width = 6, height = 5)
+
 ggplot2::ggsave(file.path(DIR_FIGURES, "Fig7B_monocle3_pseudotime.pdf"),
   plot_cells(cds, color_cells_by = "pseudotime", cell_size = .6, label_cell_groups = FALSE,
              label_leaves = FALSE, label_branch_points = FALSE, label_roots = FALSE),
   width = 6, height = 5)
+
+ggplot2::ggsave(file.path(DIR_FIGURES, "Fig7B_monocle3_arginine_transport.pdf"),
+                plot_cells(cds, color_cells_by = "ARGININE_TRANSPORT", cell_size = .6, label_cell_groups = FALSE,
+                           label_leaves = FALSE, label_branch_points = FALSE, label_roots = FALSE),
+                width = 6, height = 5)
+
+ggplot2::ggsave(file.path(DIR_FIGURES, "Fig7B_monocle3_arginine_metabolism.pdf"),
+                plot_cells(cds, color_cells_by = "ARGININE_METABOLISM", cell_size = .6, label_cell_groups = FALSE,
+                           label_leaves = FALSE, label_branch_points = FALSE, label_roots = FALSE),
+                width = 6, height = 5)
+
 ggplot2::ggsave(file.path(DIR_FIGURES, "Fig7D_monocle3_genebypseudotime.pdf"),
                 plot_genes_in_pseudotime(cell_size = 1.5, cds[c("SLC7A7"), ], min_expr = 0.1))
 
@@ -60,7 +80,7 @@ sce <- as.SingleCellExperiment(NormalizeData(CreateSeuratObject(cnt, meta.data =
 reducedDims(sce)$UMAP <- Embeddings(sm, "umap")[colnames(sce), ]
 sce$cluster <- sm$annotation_level_4[colnames(sce)]
 sce <- slingshot(sce, clusterLabels = "cluster", reducedDim = "UMAP", start.clus = "TAM-MG aging sig")
-saveRDS(slingPseudotime(sce), file.path(DIR_DATA_PROC, "slingshot_pseudotime.rds"))
+saveRDS(sce, file.path(DIR_DATA_PROC, "slingshot_pseudotime.rds"))
 
 ## CellChat: donor high/low (세포 단위 이분 아님)
 seu <- readRDS(file.path(DIR_DATA_PROC, "seurat_gbmap.rds"))

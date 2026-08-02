@@ -33,12 +33,35 @@ suppressPackageStartupMessages({
   library(msigdbr); library(ggplot2); library(dplyr); library(tidyr); library(tibble)
 })
 
+# ── ★ 분석 구획 (compartment) ───────────────────────────────────────────────
+#  음성대조는 "본문에서 실제로 쓰는 집단"에서 돌려야 합니다.
+#  microglia 논문이면 COMPARTMENT <- "microglia" 로 두고,
+#  MDM 은 특이성 대조로 한 번 더 돌리세요 (같은 스크립트, 이 줄만 변경).
+#
+#    "microglia" : TAM-MG 계열만            (n=77 donor, median 211 cells/donor)
+#    "mac"       : TAM-BDM + Mono 계열만    (n=77 donor, median 287)  ← 특이성 대조
+#    "myeloid"   : 전체                      (n=91 donor, median 469)
+COMPARTMENT <- "microglia"
+
+# 구획 정의 — obj$annotation_level_4 라벨 기준 (필요시 수정)
+COMPARTMENT_LABELS <- list(
+  microglia = c("TAM-MG aging sig","TAM-MG pro-infl I","TAM-MG pro-infl II",
+                "TAM-MG prolif"),
+  mac       = c("TAM-BDM INF","TAM-BDM MHC","TAM-BDM anti-infl",
+                "TAM-BDM hypoxia/MES","Mono naive","Mono anti-infl","Mono hypoxia"),
+  myeloid   = NULL   # NULL = 필터 없음
+)
+LABEL_COL <- "annotation_level_4"
+
 # ── 파라미터 ────────────────────────────────────────────────────────────────
 N_NULL           <- 200      # 대조 유전자 수 (논문 보고값)
 MATCH_K_POOL     <- 3000     # 매칭 후보 풀 (거리순 상위)
 EXCLUDE_COR_ABS  <- 0.50     # |Spearman(donor)| 이 이 값 이상이면 제외 (공조절 유전자 배제)
 DET_SUBSAMPLE    <- 50000    # 검출률 계산용 세포 subsample
-MIN_DONOR_CELLS  <- SC_DONOR_MIN_CELLS   # config (기본 20)
+MIN_DONOR_CELLS  <- 50       # ★ microglia 는 donor당 세포수가 적음(median 211).
+#   20(config 기본)은 pseudobulk 가 너무 시끄러움.
+#   50 / 100 두 값으로 민감도 확인 권장:
+#     20 → 77 donor / 50 → 69 / 100 → 54
 MIN_DATASET_DONOR<- 2        # dataset 더미가 자유도를 다 먹는 것 방지
 NPROC            <- 1        # fgsea 병렬 (Windows 는 1 권장)
 
@@ -59,15 +82,29 @@ PARTNER <- GENE_PARTNER           # "SLC3A2"
 # §1. donor 수준 행렬 구축 (관측 분석과 완전히 동일한 전처리)
 # =============================================================================
 
-message("[1] loading myeloid object ...")
+message("[1] loading microglia object ...")
 obj <- readRDS(file.path(DIR_DATA_PROC, "myeloid.rds"))
 
+# ★ 구획 서브셋 — 본문 분석과 동일한 집단으로 좁힌다
+labs <- COMPARTMENT_LABELS[[COMPARTMENT]]
+if (!is.null(labs)) {
+  stopifnot(LABEL_COL %in% colnames(obj@meta.data))
+  missing_lab <- setdiff(labs, unique(obj@meta.data[[LABEL_COL]]))
+  if (length(missing_lab))
+    warning("라벨 불일치: ", paste(missing_lab, collapse = ", "))
+  obj <- obj[, obj@meta.data[[LABEL_COL]] %in% labs]
+}
+message(sprintf("    COMPARTMENT = %s | cells = %d", COMPARTMENT, ncol(obj)))
+
+# 출력 파일 접미사 (구획별로 덮어쓰지 않게)
+SFX <- paste0("_", COMPARTMENT)
+
 md <- obj@meta.data
-stopifnot(all(c("donor_id", "dataset") %in% colnames(md)) ||
-            all(c("donor", "dataset") %in% colnames(md)))
+stopifnot(any(c("donor_id", "dataset") %in% colnames(md)) ||
+            any(c("donor", "dataset", "author") %in% colnames(md)))
 donor_col <- if ("donor_id" %in% colnames(md)) "donor_id" else "donor"
 
-# depth 공변량: config 의 DEPTH_COVARIATE (기본 nFeature_RNA)
+# depth 공변량: config 의 DEPTH_COVARIATE (기본 nCount_RNA)
 stopifnot(DEPTH_COVARIATE %in% colnames(md))
 
 cnt <- SeuratObject::LayerData(obj, assay = "RNA", layer = "counts")
@@ -76,11 +113,12 @@ dat <- SeuratObject::LayerData(obj, assay = "RNA", layer = "data")   # LogNormal
 donor_f <- factor(as.character(md[[donor_col]]))
 keep_donor <- names(which(table(donor_f) >= MIN_DONOR_CELLS))
 cell_ok <- donor_f %in% keep_donor
-donor_f <- droplevels(donor_f[cell_ok])
 
 cnt <- cnt[, cell_ok, drop = FALSE]
 dat <- dat[, cell_ok, drop = FALSE]
 md  <- md[cell_ok, , drop = FALSE]
+
+donor_f <- droplevels(donor_f[cell_ok])
 
 # 희소 지시행렬 (cells × donors) — AggregateExpression 버전 버그 회피
 ind <- Matrix::sparse.model.matrix(~ 0 + donor_f)
@@ -91,19 +129,21 @@ message(sprintf("    donors = %d, cells = %d", ncol(ind), nrow(md)))
 
 ## (a) pseudobulk counts (genes × donors) — DE 입력
 pb <- as.matrix(cnt %*% ind)
+colnames(pb) <- colnames(ind)
 
 ## (b) donor 평균 정규화 발현 (genes × donors) — 예측변수 후보
 dm <- sweep(as.matrix(dat %*% ind), 2, n_cell, "/")
 
 ## (c) donor 메타 (depth · dataset · n)
 donor_meta <- md %>%
-  mutate(.d = as.character(.data[[donor_col]])) %>%
-  group_by(.d) %>%
-  summarise(depth   = mean(.data[[DEPTH_COVARIATE]]),
-            dataset = names(which.max(table(dataset))),
+  dplyr::mutate(donor_id = as.character(.data[[donor_col]])) %>%
+  dplyr::group_by(donor_id ) %>%
+  dplyr::summarise(depth   = mean(.data[[DEPTH_COVARIATE]]),
+            dataset = names(which.max(table(author))),
             n_cell  = dplyr::n(), .groups = "drop") %>%
   as.data.frame()
-rownames(donor_meta) <- donor_meta$.d
+
+rownames(donor_meta) <- donor_meta$donor_id 
 donor_meta <- donor_meta[colnames(pb), ]
 
 # dataset 이 donor 1명뿐이면 제외 (더미가 자유도를 소진)
@@ -219,7 +259,7 @@ cand <- gstat %>%
 set.seed(GSEA_SEED)
 matched <- cand %>% head(N_NULL)                    # 거리순 상위 200개 (결정론적)
 
-write.csv(matched, file.path(DIR_RESULTS, "Supp_null_matched_genes.csv"),
+write.csv(matched, file.path(DIR_RESULTS, paste0("Supp_null_matched_genes", SFX, ".csv")),
           row.names = FALSE)
 
 message(sprintf("    matched %d genes | SLC7A7: mean=%.2f det=%.3f sd=%.3f",
@@ -250,7 +290,7 @@ close(pb_bar)
 null_df <- as.data.frame(null_mat) %>%
   tibble::rownames_to_column("control_gene") %>%
   pivot_longer(-control_gene, names_to = "pathway", values_to = "NES")
-write.csv(null_df, file.path(DIR_RESULTS, "Supp_null_NES_distribution.csv"),
+write.csv(null_df, file.path(DIR_RESULTS, paste0("Supp_null_NES_distribution", SFX, ".csv")),
           row.names = FALSE)
 
 ## empirical p — (1 + #{|NES_null| >= |NES_obs|}) / (1 + n)  [Phipson & Smyth 2010]
@@ -272,11 +312,11 @@ emp <- lapply(TARGET_PATHWAYS, function(p) {
 }) %>% bind_rows()
 emp$p_emp_two_BH <- p.adjust(emp$p_emp_two, "BH")
 
-write.csv(emp, file.path(DIR_RESULTS, "Supp_null_empirical_p.csv"), row.names = FALSE)
+write.csv(emp, file.path(DIR_RESULTS, paste0("Supp_null_empirical_p", SFX, ".csv")), row.names = FALSE)
 print(emp)
 
 ## 그림 — pathway별 null 분포 + 관측값 위치
-pdf(file.path(DIR_FIGURES, "SuppX_null_NES_hist.pdf"), width = 9, height = 6)
+pdf(file.path(DIR_FIGURES, paste0("SuppX_null_NES_hist", SFX, ".pdf")), width = 9, height = 6)
 print(
   ggplot(null_df, aes(NES)) +
     geom_histogram(bins = 40, fill = "grey75", colour = "white") +
@@ -320,7 +360,7 @@ if (length(iP) == 1) {
     p_emp_two  = (1 + sum(abs(t_null) >= abs(t_obs))) / (1 + length(t_null)),
     p_emp_one  = (1 + sum(t_null >= t_obs)) / (1 + length(t_null))
   )
-  write.csv(outP, file.path(DIR_RESULTS, "Supp_null_SLC3A2_partialcor.csv"),
+  write.csv(outP, file.path(DIR_RESULTS, paste0("Supp_null_SLC3A2_partialcor", SFX, ".csv")),
             row.names = FALSE)
   print(outP)
 }

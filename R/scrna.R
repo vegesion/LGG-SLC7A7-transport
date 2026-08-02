@@ -174,7 +174,7 @@ load_gbmap_bpcells <- function(bp_dir, h5ad_path = PATH_H5AD, normalize = TRUE) 
   }
   h5$close_all()
 
-  if (normalize) seu <- Seurat::NormalizeData(seu)              # CellChat/FetchData 에 필요
+  if (normalize) {seu <- Seurat::NormalizeData(seu); seu <- FindVariableFeatures(seu); seu <- ScaleData(seu); seu <- RunPCA(seu, npcs = 50, verbose = FALSE)}      # CellChat/FetchData 에 필요
   seu
 }
 

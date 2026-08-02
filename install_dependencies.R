@@ -40,13 +40,13 @@ install_safe <- function(pkgs, installer) {
 cran <- c("here", "tidyverse", "survival", "survminer", "coxphf", "devEMF",
           "pbapply", "ggpubr", "ggrepel", "rstatix", "viridis", "patchwork",
           "jsonlite", "remotes", "devtools", "anndata", "reticulate", "readr", "hdf5r",
-          "glmnet", "timeROC", "lme4", "lmerTest", "pheatmap")
+          "glmnet", "timeROC", "lme4", "lmerTest", "pheatmap", "harmony")
 install_safe(cran, function(p) install.packages(p))
 
 # ── 4. Bioconductor 패키지 ───────────────────────────────────────────────────
 bioc <- c("TCGAbiolinks", "SummarizedExperiment", "AnnotationDbi", "org.Hs.eg.db",
           "clusterProfiler", "msigdbr", "enrichplot", "fgsea", "limma", "edgeR",
-          "DESeq2", "Seurat", "SingleCellExperiment", "slingshot", "biomaRt", "UCell")
+          "DESeq2", "Seurat", "SingleCellExperiment", "slingshot", "biomaRt", "UCell", "apeglm")
 install_safe(bioc, function(p) BiocManager::install(p, ask = FALSE, update = FALSE))
 
 # ── 5. GitHub 전용 패키지 ────────────────────────────────────────────────────
@@ -57,9 +57,10 @@ gh <- c(BPCells     = "bnprks/BPCells/r",
         monocle3    = "cole-trapnell-lab/monocle3",
         MRcML       = "xue-hr/MRcML",
         TwoSampleMR = "MRCIEU/TwoSampleMR",
-        MRPRESSO    = "rondolab/MR-PRESSO")
+        MRPRESSO    = "rondolab/MR-PRESSO",
+        GOplot      = "GOplot")
 install_safe(names(gh), function(p) remotes::install_github(gh[[p]], upgrade = "never"))
-
+remotes::install_github("satijalab/seurat-wrappers")
 
 # # -----estimate 설치------ ------------------------------------------------
 
