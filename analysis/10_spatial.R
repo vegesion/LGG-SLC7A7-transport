@@ -170,6 +170,8 @@ assayNames(sce1); altExpNames(sce1)
 head(colData(sce1))
 head(reducedDim(sce1, "spatial"))
 
+
+
 "SLC7A7" %in% rownames(sce1)                # 타겟 존재 확인
 
 # counts가 진짜 정수인지 (FLOAT로 저장돼 있으므로 확인 필요)
@@ -216,19 +218,26 @@ rm(sce_list)
 sce_all <- do.call(cbind, lapply(sce_list, function(x) {
   y <- x[common_genes, ]; altExps(y) <- NULL; y
 }))
+rm(sce_list)
 sce_all
-# saveRDS(sce_all, file.path(OUT_DIR, "visium_all_merged_sce.rds"))
+saveRDS(sce_all, file.path(OUT_DIR, "visium_all_merged_sce.rds"))
 
+sce_all <- readRDS(file.path(OUT_DIR, "visium_all_merged_sce.rds"))
 
 # ==============================================================================
 # 옵션 B: H&E 이미지까지 필요하면 (Seurat spatial 객체)
 # ------------------------------------------------------------------------------
-# remotes::install_github("cellgeni/schard")
-#
-# srt <- schard::h5ad2seurat_spatial(h5ad_files[[1]])
-# ft  <- srt[["Spatial"]]@meta.features$feature_types      # 복수형 주의
-# srt <- subset(srt, features = rownames(srt)[ft == "Gene Expression"])
-# Seurat::SpatialFeaturePlot(srt, features = "SLC7A7")
+remotes::install_github("cellgeni/schard")
+
+srt <- schard::h5ad2seurat_spatial(h5ad_files[[1]])
+ft  <- srt[["Spatial"]]@meta.data$feature_types      # 복수형 주의
+srt <- subset(srt, features = rownames(srt)[ft == "Gene Expression"])
+srt <- NormalizeData(
+  srt,
+  assay = DefaultAssay(srt)
+)
+Seurat::SpatialFeaturePlot(srt, features = "SLC7A7")
+
 # ==============================================================================
 "================================================="
 
@@ -345,7 +354,7 @@ spot_df <- readRDS(file.path(RES_DIR, "spot_df.rds"))
 ## 9. QC — 이 데이터로 SLC7A7 얘기를 할 수 있는지부터 확인
 ## ============================================================================
 # 9-1. donor(tumor) 수 = 실질적 반복 수. 여기서 통계 설계가 결정된다.
-spot_df %>% count(tumor_id, file_id) %>% count(tumor_id, name = "n_sections")
+spot_df %>% dplyr::count(tumor_id, file_id) %>% dplyr::count(tumor_id, name = "n_sections")
 
 # 9-2. SLC7A7 검출률. 너무 낮으면(<10~15%) spot-level 상관은 힘이 없다.
 qc_det <- spot_df %>%
@@ -395,7 +404,7 @@ if (nrow(na_report) > 0) {
     pivot_longer(-c(tumor_id, file_id), names_to = "col", values_to = "frac_na") %>%
     filter(frac_na > 0) %>%
     left_join(CS_KEY, by = "col") %>%
-    count(tumor_id, label) %>%
+    dplyr::count(tumor_id, label) %>%
     print(n = 100)
 }
 
@@ -672,39 +681,143 @@ plot_spatial <- function(d, col, title = NULL, pal = "magma", trans = "identity"
     theme_void(base_size = 10) +
     theme(plot.title = element_text(size = 10, hjust = .5))
 }
-
+# library(purrr)
 # SLC7A7 검출률이 가장 높은 상위 5개 section을 대표로
 rep_id <- qc_det$file_id[order(qc_det$det_rate, decreasing = TRUE)[1:5]]
+# print(CS_KEY,100)
+show_states <- c(
+  "Hypoxic 1 (cell state)",
+  "Hypoxic 2 (cell state)",
+  "Endothelial (capillary)",
+  "Pericytes 1",
+  "Pro-inflammatory TAMs",
+  "Anti-inflammatory TAMs",
+  "Angiogenic TAMs",
+  "Resident-TAMs"
+)
+"#####################################################################"
+"#####################################################################"
+"#####################################################################"
+"#####################################################################"
+"#####################################################################"
+"#####################################################################"
 
-for (rep_id in rep_id) {
+
+# h5ad 파일명 -> file_id 매핑
+h5ad_file_id <- tools::file_path_sans_ext(basename(h5ad_files))
+
+# file_id가 실제로 모두 대응되는지 확인
+stopifnot(all(rep_id %in% h5ad_file_id))
+
+for (rid in rep_id) {
   
-  d1 <- spot_df %>% filter(file_id == rep_id)
+  # --------------------------------------------------
+  # 1. spot_df에서 해당 replicate 추출
+  # --------------------------------------------------
+  d1 <- spot_df %>%
+    dplyr::filter(file_id == rid)
   
-  panels <- c(
-    list(
-      plot_spatial(d1, "g_SLC7A7", "SLC7A7"),
-      plot_spatial(d1, "tam_frac", "TAM fraction")
-    ),
-    purrr::map(show_states, ~ plot_spatial(d1, CS_KEY$col[CS_KEY$label == .x], .x))
+  # --------------------------------------------------
+  # 2. 기존 spatial plots
+  # --------------------------------------------------
+  panels <- list(
+    plot_spatial(d1, "g_SLC7A7", "SLC7A7")
   )
   
-  p_niche_map <- ggplot(d1, aes(spatial_x, spatial_y, colour = dom_niche)) +
+  # --------------------------------------------------
+  # 3. 해당 file_id의 h5ad 찾기
+  # --------------------------------------------------
+  h5ad_idx <- match(rid, h5ad_file_id)
+  
+  if (is.na(h5ad_idx)) {
+    stop("h5ad 파일을 찾을 수 없습니다: ", rid)
+  }
+  
+  # --------------------------------------------------
+  # 4. h5ad -> Seurat spatial object
+  # --------------------------------------------------
+  srt <- schard::h5ad2seurat_spatial(
+    h5ad_files[[h5ad_idx]]
+  )
+  
+  # Gene Expression만 유지
+  ft <- srt[["Spatial"]]@meta.data$feature_types
+  
+  srt <- subset(
+    srt,
+    features = rownames(srt)[ft == "Gene Expression"]
+  )
+  
+  # Normalize
+  srt <- NormalizeData(
+    srt,
+    assay = DefaultAssay(srt)
+  )
+  
+  # SLC7A7 존재 확인
+  if (!"SLC7A7" %in% rownames(srt)) {
+    stop("SLC7A7이 h5ad 파일에 없습니다: ", rid)
+  }
+  
+  # --------------------------------------------------
+  # 5. Seurat SpatialFeaturePlot
+  # --------------------------------------------------
+  p_srt <- Seurat::SpatialFeaturePlot(
+    srt,
+    features = "SLC7A7"
+  ) +
+    ggplot2::ggtitle("SLC7A7")
+  
+  
+  panels <- c(panels, purrr::map(show_states, function(state) {
+        
+        col <- CS_KEY$col[CS_KEY$label == state]
+        
+        # state에 대응하는 column이 없으면 명확하게 에러
+        if (length(col) != 1 || is.na(col)) {
+          stop(
+            "CS_KEY에서 state를 찾을 수 없습니다: ",
+            state)
+        }
+        plot_spatial(d1, col, state)})
+  )
+  
+  
+  # --------------------------------------------------
+  # 6. Dominant niche map
+  # --------------------------------------------------
+  p_niche_map <- ggplot(
+    d1,
+    aes(spatial_x, spatial_y, colour = dom_niche)
+  ) +
     geom_point(size = .8) +
     coord_fixed() +
     scale_y_reverse() +
-    labs(title = paste("Dominant niche:", rep_id), colour = NULL) +
+    labs(
+      title = paste("Dominant niche:", rid),
+      colour = NULL
+    ) +
     theme_void(base_size = 10)
   
-  p_map <- wrap_plots(c(panels, list(p_niche_map)), ncol = 4)
-  
+  # --------------------------------------------------
+  # 7. 전체 패널 합치기
+  # --------------------------------------------------
+  p_map <- patchwork::wrap_plots(
+    c(panels, list(p_srt, p_niche_map)),
+    ncol = 4)
+  # --------------------------------------------------
+  # 8. 저장
+  # --------------------------------------------------
   ggsave(
-    file.path(FIG_DIR, paste0("F6_spatialmap_", rep_id, ".pdf")),
+    file.path(
+      FIG_DIR,
+      paste0("F6_spatialmap_", rid, ".pdf")
+    ),
     p_map,
     width = 15,
     height = 8
   )
 }
-
 ## ============================================================================
 ## 15. 분석 5 — niche 단위 pseudobulk DE (기존 파이프라인과 동일한 틀)
 ## ============================================================================
@@ -864,6 +977,8 @@ ggsave(file.path(FIG_DIR, "S1_composition_naive_vs_matched.pdf"), p_compare, wid
 ## C. dropout 대응 — 이웃 평활 & 검출 여부
 ## ============================================================================
 # install.packages("FNN")
+library(FNN)
+
 smooth_knn <- function(d, col = "g_SLC7A7", k = 6) {
   xy <- as.matrix(d[, c("spatial_x", "spatial_y")])
   nn <- FNN::get.knn(xy, k = k)$nn.index
@@ -995,11 +1110,7 @@ res <- as.data.frame(res_stat) %>%
 write.csv(res, file.path(RES_DIR, "spatial_pseudobulk_DE.csv"), row.names = FALSE)
 
 ## ---- 2. 순위 벡터 (data mask 사고 방지를 위해 $ 로 명시적 접근) ------------
-r <- res[!is.na(res$stat), ]
-r <- r[r$gene != "SLC7A7", ]        # 그룹 정의에 쓴 유전자는 제외
-rank_vec <- setNames(r$stat, r$gene)
-rank_vec <- sort(rank_vec, decreasing = TRUE)
-
+ 
 
 
 # --- Hallmark GSEA: GBmap 결과가 공간에서도 재현되는가 -----------------------
@@ -1007,11 +1118,42 @@ suppressPackageStartupMessages({ library(fgsea); library(msigdbr) })
 hall <- msigdbr(species = "Homo sapiens", collection = "H")
 paths <- split(hall$gene_symbol, hall$gs_name)
 
+SEED            <- 42
+INTER_GENE_COR  <- 0.01 
+HALLMARK <- get_hallmark_list()
+GOBP <- get_gobp_list()
+GOMF <- get_gomf_list()
+GOCC <- get_gocc_list()
+
+run_gsea_pair <- function(stat_vec, term) {
+  stat_vec <- sort(stat_vec[is.finite(stat_vec)], decreasing = TRUE)
+  set.seed(SEED)
+  fg <- fgsea::fgsea(pathways = term, stats = stat_vec,
+                     minSize = 10, maxSize = 500, eps = 0, nPermSimple = 100000)
+  idx <- limma::ids2indices(term, names(stat_vec))
+  idx <- idx[vapply(idx, length, 1L) >= 10]
+  cam <- limma::cameraPR(stat_vec, idx, inter.gene.cor = INTER_GENE_COR,
+                         use.ranks = FALSE)
+  cam$pathway <- rownames(cam)
+  out <- fg %>%
+    dplyr::select(pathway, NES, pval, padj, size) %>%
+    dplyr::left_join(cam %>% dplyr::select(pathway, Direction,
+                                           camera_p = PValue, camera_FDR = FDR),
+                     by = "pathway") %>%
+    dplyr::arrange(pval)
+  out
+}
 stat <- res %>% filter(!is.na(stat)) %>% { setNames(.$stat, .$gene) }
-gs <- fgsea(paths, stat, minSize = 15, maxSize = 500) %>% arrange(padj)
-print(gs %>% select(pathway, NES, padj) %>% head(20))
-write.csv(as.data.frame(gs)[, c("pathway","NES","pval","padj","size")],
-          file.path(RES_DIR, "spatial_GSEA_hallmark.csv"), row.names = FALSE)
+
+gs_hall <- run_gsea_pair(stat, HALLMARK) %>% arrange(padj)
+gs_bp <- run_gsea_pair(stat, GOBP) %>% arrange(padj)
+gs_mf <- run_gsea_pair(stat, GOMF) %>% arrange(padj)
+gs_CC <- run_gsea_pair(stat, GOCC) %>% arrange(padj)
+
+write_result(gs_hall, "Fig8_spatial_gsea_HALL.csv")
+write_result(gs_bp, "Fig8_spatial_gsea_BP.csv")
+write_result(gs_mf, "Fig8_spatial_gsea_MF.csv")
+write_result(gs_CC, "Fig8_spatial_gsea_CC.csv")
 
 # GBmap에서 나온 3개 경로만 직접 확인
 key <- c("HALLMARK_TNFA_SIGNALING_VIA_NFKB",

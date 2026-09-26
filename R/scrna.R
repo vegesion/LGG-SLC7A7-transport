@@ -143,38 +143,170 @@ read_obs_all <- function(path, cells = NULL) {
 
 # ── BPCells 온디스크 행렬 + h5ad 메타로 Seurat v5 구성 (RAM 안전) ─────────────
 # bp_dir: write_matrix_dir 로 만든 폴더. 없으면 h5ad 에서 만들어 둔다.
-load_gbmap_bpcells <- function(bp_dir, h5ad_path = PATH_H5AD, normalize = TRUE) {
-  stopifnot(requireNamespace("BPCells", quietly = TRUE))
+# load_gbmap_bpcells <- function(bp_dir, h5ad_path = PATH_H5AD, normalize = TRUE) {
+#   stopifnot(requireNamespace("BPCells", quietly = TRUE))
+#   if (!dir.exists(bp_dir)) {
+#     message("[BPCells] 온디스크 행렬 생성(최초 1회) → ", bp_dir)
+#     mat <- BPCells::open_matrix_anndata_hdf5(h5ad_path)
+#     BPCells::write_matrix_dir(mat, bp_dir)
+#   }
+#   counts <- BPCells::open_matrix_dir(bp_dir)
+#   if (nrow(counts) > ncol(counts)) counts <- t(counts)          # genes×cells (전치는 공짜)
+# 
+#   if (any(grepl("^ENSG", utils::head(rownames(counts), 50)))) { # ENSEMBL → SYMBOL
+#     g   <- rownames(counts)
+#     sym <- AnnotationDbi::mapIds(org.Hs.eg.db::org.Hs.eg.db, keys = g,
+#              column = "SYMBOL", keytype = "ENSEMBL", multiVals = "first")
+#     sym[is.na(sym)] <- g[is.na(sym)]
+#     rownames(counts) <- make.unique(sym)
+#   }
+# 
+#   seu  <- Seurat::CreateSeuratObject(counts = counts)
+#   meta <- read_obs_all(h5ad_path, cells = colnames(seu))        # obs 전체
+#   seu  <- Seurat::AddMetaData(seu, meta)
+# 
+#   h5 <- hdf5r::H5File$new(h5ad_path, "r")                       # UMAP
+#   if ("obsm" %in% names(h5) && "X_umap" %in% names(h5[["obsm"]])) {
+#     um <- h5[["obsm/X_umap"]]$read()
+#     if (nrow(um) != ncol(seu)) um <- t(um)
+#     rownames(um) <- colnames(seu); colnames(um) <- c("UMAP_1", "UMAP_2")
+#     seu[["umap"]] <- Seurat::CreateDimReducObject(embeddings = um, key = "UMAP_", assay = "RNA")
+#   }
+#   h5$close_all()
+# 
+#   if (normalize) {seu <- Seurat::NormalizeData(seu); seu <- FindVariableFeatures(seu); seu <- ScaleData(seu); seu <- RunPCA(seu, npcs = 50, verbose = FALSE)}      # CellChat/FetchData 에 필요
+#   seu
+# }
+
+
+h5_read_vec <- function(h5, path) {
+  if (!h5$exists(path)) return(NULL)
+  o <- h5[[path]]
+  if (inherits(o, "H5Group")) {
+    cats  <- as.character(o[["categories"]]$read())
+    codes <- o[["codes"]]$read()
+    out <- cats[codes + 1L]; out[codes < 0] <- NA_character_
+    out
+  } else as.vector(o$read())
+}
+
+REQUIRED_OBS <- c("donor_id", "author", "suspension_type", "assay",
+                  "annotation_level_3", "annotation_level_4")
+
+load_gbmap_bpcells <- function(bp_root, h5ad_path = PATH_H5AD,
+                               group      = "raw/X",
+                               normalize  = TRUE,
+                               run_pca    = FALSE,
+                               as_uint32  = TRUE,
+                               reductions = c("X_umap", "X_scANVI", "X_scanvi_emb",
+                                              "X_pca", "X_scvi")) {
+  stopifnot(requireNamespace("BPCells", quietly = TRUE),
+            requireNamespace("hdf5r",   quietly = TRUE))
+  
+  ## === phase 1 : h5 에서 이름 정보만 읽고 즉시 닫기 ==========================
+  info <- local({
+    h5 <- hdf5r::H5File$new(h5ad_path, "r")
+    on.exit(h5$close_all(), add = TRUE)
+    if (!h5$exists(group)) stop("h5ad 에 '", group, "' 없음.")
+    vp <- if (startsWith(group, "raw/") && h5$exists("raw/var/_index")) "raw/var" else "var"
+    list(
+      var_prefix  = vp,
+      gene_id     = h5_read_vec(h5, paste0(vp, "/_index")),
+      gene_name   = h5_read_vec(h5, paste0(vp, "/feature_name")),
+      cell_id     = h5_read_vec(h5, "obs/_index"),
+      n_filtered  = if (h5$exists("var/feature_is_filtered"))
+        sum(h5[["var/feature_is_filtered"]]$read()) else NA_integer_,
+      obsm_names  = if ("obsm" %in% names(h5)) names(h5[["obsm"]]) else character(0)
+    )
+  })
+  n_var <- length(info$gene_id); n_obs <- length(info$cell_id)
+  message(sprintf("[h5ad] var = %s | n_var = %d | n_obs = %d | feature_is_filtered = %s",
+                  info$var_prefix, n_var, n_obs, info$n_filtered))
+  message("[obsm] ", paste(info$obsm_names, collapse = ", "))
+  
+  ## === phase 2 : BPCells 온디스크 행렬 =======================================
+  bp_dir <- file.path(bp_root, gsub("[^A-Za-z0-9]", "_", group))
   if (!dir.exists(bp_dir)) {
-    message("[BPCells] 온디스크 행렬 생성(최초 1회) → ", bp_dir)
-    mat <- BPCells::open_matrix_anndata_hdf5(h5ad_path)
+    message("[BPCells] 생성 (", group, ") → ", bp_dir, "  ※ 수십 분")
+    dir.create(bp_root, recursive = TRUE, showWarnings = FALSE)
+    mat <- BPCells::open_matrix_anndata_hdf5(h5ad_path, group = group)
+    if (as_uint32) mat <- BPCells::convert_matrix_type(mat, "uint32_t")
     BPCells::write_matrix_dir(mat, bp_dir)
+  } else {
+    message("[BPCells] 기존 캐시 사용: ", bp_dir)
   }
   counts <- BPCells::open_matrix_dir(bp_dir)
-  if (nrow(counts) > ncol(counts)) counts <- t(counts)          # genes×cells (전치는 공짜)
-
-  if (any(grepl("^ENSG", utils::head(rownames(counts), 50)))) { # ENSEMBL → SYMBOL
-    g   <- rownames(counts)
-    sym <- AnnotationDbi::mapIds(org.Hs.eg.db::org.Hs.eg.db, keys = g,
-             column = "SYMBOL", keytype = "ENSEMBL", multiVals = "first")
-    sym[is.na(sym)] <- g[is.na(sym)]
-    rownames(counts) <- make.unique(sym)
+  
+  d <- as.integer(dim(counts))
+  if (identical(d, c(n_obs, n_var))) {
+    counts <- t(counts)
+  } else if (!identical(d, c(n_var, n_obs))) {
+    stop(sprintf("행렬 %d x %d 가 n_var=%d / n_obs=%d 와 불일치", d[1], d[2], n_var, n_obs))
   }
-
-  seu  <- Seurat::CreateSeuratObject(counts = counts)
-  meta <- read_obs_all(h5ad_path, cells = colnames(seu))        # obs 전체
-  seu  <- Seurat::AddMetaData(seu, meta)
-
-  h5 <- hdf5r::H5File$new(h5ad_path, "r")                       # UMAP
-  if ("obsm" %in% names(h5) && "X_umap" %in% names(h5[["obsm"]])) {
-    um <- h5[["obsm/X_umap"]]$read()
-    if (nrow(um) != ncol(seu)) um <- t(um)
-    rownames(um) <- colnames(seu); colnames(um) <- c("UMAP_1", "UMAP_2")
-    seu[["umap"]] <- Seurat::CreateDimReducObject(embeddings = um, key = "UMAP_", assay = "RNA")
+  
+  sym <- if (!is.null(info$gene_name) && length(info$gene_name) == n_var) {
+    ifelse(is.na(info$gene_name) | info$gene_name == "", info$gene_id, info$gene_name)
+  } else { warning("feature_name 없음 → ENSEMBL ID 유지"); info$gene_id }
+  
+  dup <- unique(sym[duplicated(sym)])
+  if (length(dup)) message("[genes] 중복 심볼: ", paste(dup, collapse = ", "))
+  rownames(counts) <- make.unique(as.character(sym))
+  colnames(counts) <- as.character(info$cell_id)
+  
+  seu <- Seurat::CreateSeuratObject(counts = counts)
+  
+  # Seurat 이 밑줄을 대시로 치환하므로 실제 바뀐 이름 확인
+  changed <- setdiff(make.unique(as.character(sym)), rownames(seu))
+  if (length(changed))
+    message(sprintf("[genes] Seurat 이 이름 변경한 유전자 %d 개 (예: %s)",
+                    length(changed), paste(utils::head(changed, 5), collapse = ", ")))
+  
+  ## === phase 3 : obs 메타데이터 (여기서 h5 핸들 안 들고 있어야 함) ===========
+  meta <- read_obs_all(h5ad_path, cells = colnames(seu))
+  if (is.null(rownames(meta))) rownames(meta) <- as.character(info$cell_id)
+  stopifnot(identical(rownames(meta), colnames(seu)))
+  seu <- Seurat::AddMetaData(seu, meta)
+  
+  miss <- setdiff(REQUIRED_OBS, colnames(seu@meta.data))
+  if (length(miss))
+    warning("필수 obs 컬럼 누락: ", paste(miss, collapse = ", "),
+            " — read_obs_all 이 건너뛰었는지 확인할 것")
+  
+  ## === phase 4 : obsm 임베딩 (h5 재오픈) =====================================
+  emb <- local({
+    tgt <- intersect(reductions, info$obsm_names)
+    if (!length(tgt)) return(list())
+    h5 <- hdf5r::H5File$new(h5ad_path, "r")
+    on.exit(h5$close_all(), add = TRUE)
+    stats::setNames(lapply(tgt, function(nm) h5[[paste0("obsm/", nm)]]$read()), tgt)
+  })
+  for (nm in names(emb)) {
+    em <- emb[[nm]]
+    if (nrow(em) != ncol(seu)) em <- t(em)
+    if (nrow(em) != ncol(seu)) next
+    red <- gsub("^X_", "", nm); key <- paste0(red, "_")
+    rownames(em) <- colnames(seu); colnames(em) <- paste0(key, seq_len(ncol(em)))
+    seu[[red]] <- Seurat::CreateDimReducObject(embeddings = em, key = key, assay = "RNA")
   }
-  h5$close_all()
-
-  if (normalize) {seu <- Seurat::NormalizeData(seu); seu <- FindVariableFeatures(seu); seu <- ScaleData(seu); seu <- RunPCA(seu, npcs = 50, verbose = FALSE)}      # CellChat/FetchData 에 필요
+  
+  ## === phase 5 : 정수 검증 → 정규화 ==========================================
+  smp <- SeuratObject::LayerData(seu, layer = "counts")[
+    seq_len(min(2000, nrow(seu))), seq_len(min(200, ncol(seu)))]
+  smp <- as.matrix(smp)                    # ★ BPCells lazy subset → base matrix
+  v <- smp[smp > 0]
+  is_raw <- length(v) > 0 && all(abs(v - round(v)) < 1e-8)
+  message(sprintf("[counts] 정수 = %s | 예시: %s", is_raw,
+                  paste(utils::head(sort(unique(v)), 6), collapse = ", ")))
+  if (!is_raw) stop("counts 가 정수 아님 — group 인자 확인 (raw/X).")
+  
+  if (normalize) seu <- Seurat::NormalizeData(seu, verbose = FALSE)
+  if (run_pca) {
+    seu <- Seurat::FindVariableFeatures(seu, verbose = FALSE)
+    seu <- Seurat::ScaleData(seu, verbose = FALSE)      # ~5 GB dense, 배치 미보정
+    seu <- Seurat::RunPCA(seu, npcs = 50, verbose = FALSE)
+  }
+  
+  message(sprintf("[done] %d genes x %d cells | layer = %s", nrow(seu), ncol(seu), group))
   seu
 }
 

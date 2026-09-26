@@ -14,13 +14,20 @@ for (nm in names(cohorts)) {
   if (!GENE_OF_INTEREST %in% rownames(co$expr)) { message(nm, ": 유전자 없음"); next }
   v <- cohort_gene(co)
   km <- try(km_cohort(co), silent = TRUE)
-  if (!inherits(km, "try-error"))
+  k <- km_cohort(co)
+  k$plot <- k$plot + coord_cartesian(ylim = c(-0.15, 1))
+  if (!inherits(km, "try-error")){
     ggplot2::ggsave(file.path(DIR_FIGURES, paste0("Fig3_KM_", nm, ".pdf")),
-                    survminer::arrange_ggsurvplots(list(km), print = FALSE), width = 5.5, height = 6.5)
+                    survminer::arrange_ggsurvplots(list(km), print = FALSE), width = 6.5, height = 6.5)
+    save_emf(k$plot, paste0("Fig3_KM_", nm, ".emf"))
+    }
+  
   roc_tab[[nm]] <- timedep_roc(co, v, label = GENE_OF_INTEREST)
   r <- try(plot_timedep_roc(co, v), silent = TRUE)
-  if (!inherits(r, "try-error"))
+  if (!inherits(r, "try-error")){
     ggplot2::ggsave(file.path(DIR_FIGURES, paste0("Fig3_ROC_", nm, ".pdf")), r, width = 5, height = 4.5)
+    save_emf(r, paste0("Fig3_ROC_", nm, ".emf"))
+  }
   mv <- multivariable_cox(co$expr, co$clin, GENE_OF_INTEREST)
   if (!is.null(mv)) mv_tab[[nm]] <- dplyr::mutate(mv$table[mv$table$term == "gene", ],
                                                   cohort = nm, label = nm)
@@ -35,6 +42,12 @@ if (nrow(mv_df)) ggplot2::ggsave(file.path(DIR_FIGURES, "Fig3_forest_multicohort
   forest_multicohort(mv_df), width = 6, height = 0.5 * nrow(mv_df) + 2)
 if (length(dca_all)) {
   dca_df <- dplyr::bind_rows(dca_all); write_result(dca_df, "Fig3_DCA.csv")
-  ggplot2::ggsave(file.path(DIR_FIGURES, "Fig3_DCA.pdf"), plot_dca(dca_df), width = 9, height = 4)
+  ggplot2::ggsave(file.path(DIR_FIGURES, "Fig3_DCA.pdf"), plot_dca(dca_df), width = 9, height = 9)
+  save_emf(plot_dca(dca_df), paste0("Fig3_DCA.emf"))
+}
+for (nm in unique(dca_df$cohort)) {
+  p <- plot_dca_one(subset(dca_df, cohort == nm))
+  ggplot2::ggsave(file.path(DIR_FIGURES, paste0("Fig_DCA_", nm, ".pdf")), p, width = 9, height = 9)
+  save_emf(p, paste0("Fig_DCA_", nm, ".emf"))
 }
 print(roc_df); print(mv_df); message("완료: 다중 코호트 검증")

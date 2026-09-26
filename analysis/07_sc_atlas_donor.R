@@ -26,7 +26,7 @@ ggplot2::ggsave(file.path(DIR_FIGURES, "Fig5C_celltype_donor.pdf"),
     ggplot2::labs(x = NULL, y = paste(GENE_OF_INTEREST, "(donor mean)")) + theme_paper() +
     ggplot2::theme(axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)), width = 7, height = 5)
 
-## AUCell (depth 강건) + donor 연속 검정
+## UCell (depth 강건) + donor 연속 검정
 tr_set <- build_transporter_geneset(universe = rownames(microglia))
 auc <- score_auc(microglia, list(transport = tr_set,
                            arg_enzyme = build_arg_enzyme_geneset(universe = rownames(seu))))
@@ -64,6 +64,26 @@ message("완료: Fig5")
 
 
 
+# graph -------------------------------------------------------------------
+
+p <- ggpubr::ggboxplot(
+  donor_ct,
+  x = "ct",
+  y = "m",
+  add = "jitter"
+) +
+  ggplot2::labs(
+    x = NULL,
+    y = paste(GENE_OF_INTEREST, "(donor mean)")
+  ) +
+  theme_paper() +
+  ggplot2::theme(
+    axis.text.x = ggplot2::element_text(angle = 45, hjust = 1)
+  )
+
+
+p + theme_blank_frame()
+save_emf(p+theme_blank_frame(), "Fig5C_celltype_donor.emf", height = 3, width = 8)
 "=================="
 
 # add ---------------------------------------------------------------------

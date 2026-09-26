@@ -18,6 +18,20 @@ get_hallmark_list <- function() {
   split(h$gene_symbol, h$gs_name)
 }
 
+get_gobp_list <- function() {
+  h <- msigdbr::msigdbr(species = "Homo sapiens", category = "C5", subcategory = "GO:BP")
+  split(h$gene_symbol, h$gs_name)
+}
+
+get_gocc_list <- function() {
+  h <- msigdbr::msigdbr(species = "Homo sapiens", category = "C5", subcategory = "GO:CC")
+  split(h$gene_symbol, h$gs_name)
+}
+
+get_gomf_list <- function() {
+  h <- msigdbr::msigdbr(species = "Homo sapiens", category = "C5", subcategory = "GO:MF")
+  split(h$gene_symbol, h$gs_name)
+}
 # ── 발현행렬에서 특정 유전자와의 상관 순위 벡터 / correlation ranking ─────────
 correlation_ranked_list <- function(expr_mat, gene = GENE_OF_INTEREST, method = "spearman") {
   gene_vec <- as.numeric(expr_mat[gene, ])

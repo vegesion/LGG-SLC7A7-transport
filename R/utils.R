@@ -54,9 +54,9 @@ theme_paper <- function(base_size = 12) {
 # ── "그림 틀만" 테마 / Blank-frame theme ──────────────────────────────────────
 # 축·제목·텍스트를 모두 제거하고 tick만 남깁니다. PPT로 옮겨 라벨을 다시 그리는
 # 논문 제출용 워크플로에 사용. (원본 seurat그래프그리는코드.R의 스타일을 함수화)
-theme_blank_frame <- function(tick_len = 8, keep_grid_x = FALSE) {
+theme_blank_frame <- function(tick_len = 8, keep_grid_x = FALSE, lp = "none") {
   th <- ggplot2::theme_void() +
-    ggplot2::theme(legend.position = "none",
+    ggplot2::theme(legend.position = lp,
                    plot.title = ggplot2::element_blank(),
                    axis.ticks.x = ggplot2::element_line(linewidth = 0.5, color = "black"),
                    axis.ticks.y = ggplot2::element_line(linewidth = 0.5, color = "black"),
@@ -73,8 +73,14 @@ theme_blank_frame <- function(tick_len = 8, keep_grid_x = FALSE) {
 
 # ── 그림 저장 헬퍼 / Figure export helpers ───────────────────────────────────
 # EMF (벡터, PPT 편집용) 저장. devEMF 필요.
-save_emf <- function(plot, filename, width = 7, height = 7, dir = DIR_FIGURES, draw_grid = FALSE) {
-  plot <- plot + theme_blank_frame(keep_grid_x = draw_grid)
+save_emf <- function(plot, filename, width = 5.5, height = 5.5, dir = DIR_FIGURES, draw_major_grid = FALSE, draw_minor_grid = FALSE, legend_p = "none") {
+  if (draw_major_grid == TRUE)
+    plot <- plot + theme_blank_frame(keep_grid_x = draw_minor_grid, lp = legend_p)+ theme(
+      panel.grid.major = element_line(colour = "grey92", linewidth = 0.3),
+      panel.grid.minor = element_line(colour = "grey92", linewidth = 0.2))
+  else
+    plot <- plot + theme_blank_frame(keep_grid_x = draw_minor_grid, lp = legend_p)
+  
   devEMF::emf(file = file.path(dir, filename), width = width, height = height)
   print(plot); grDevices::dev.off()
   invisible(file.path(dir, filename))

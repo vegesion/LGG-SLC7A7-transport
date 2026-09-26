@@ -18,7 +18,7 @@ km_cohort <- function(co, gene = GENE_OF_INTEREST, method = "median", palette = 
   d <- d[stats::complete.cases(d) & d$time > 0, ]
   d$group <- make_groups(d$x, method, d$time, d$event)
   fit <- survival::survfit(survival::Surv(time, event) ~ group, data = d)
-  survminer::ggsurvplot(fit, data = d, pval = TRUE, conf.int = FALSE, risk.table = TRUE,
+  survminer::ggsurvplot(fit, data = d, pval = TRUE, conf.int = TRUE, conf.int.style = "step", risk.table = TRUE,
     palette = palette, censor.shape = 124, size = 1.1, xlab = "Time (months)",
     ylab = "Overall survival", title = paste0(co$name, " — ", gene),
     ggtheme = ggplot2::theme_classic(base_size = 12))
@@ -83,6 +83,20 @@ plot_dca <- function(dca_df) {
     ggplot2::coord_cartesian(ylim = c(-0.05, max(dca_df$net_benefit, na.rm = TRUE) * 1.1)) +
     ggplot2::facet_wrap(~cohort, scales = "free_y") +
     ggplot2::labs(x = "Threshold probability", y = "Net benefit", color = NULL) + theme_paper()
+}
+
+plot_dca_one <- function(dca_df) {
+  ggplot2::ggplot(dca_df, ggplot2::aes(threshold, net_benefit, color = model)) +
+    ggplot2::geom_line(linewidth = 0.9) +
+    ggplot2::coord_cartesian(
+      ylim = c(-0.05, max(dca_df$net_benefit, na.rm = TRUE) * 1.1)
+    ) +
+    ggplot2::labs(
+      x = "Threshold probability",
+      y = "Net benefit",
+      color = NULL
+    ) +
+    theme_paper()
 }
 
 forest_multicohort <- function(tab) {

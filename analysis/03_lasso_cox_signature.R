@@ -17,6 +17,7 @@ plot_lasso(las); grDevices::dev.off()
 message(GENE_OF_INTEREST, if (GENE_OF_INTEREST %in% las$selected$gene) " 는 LASSO 선택됨."
         else " 는 LASSO 탈락 → candidate-gene 설계로 보고할 것.")
 
+# plot_lasso(las)
 uni <- univariate_cox(co$expr, co$clin, genes); write_result(uni, "univariate_cox_transporters.csv")
 mv  <- multivariable_cox(co$expr, co$clin, GENE_OF_INTEREST)
 if (!is.null(mv)) { print(mv$table); write_result(mv$table, "multivariable_cox_train.csv") }
@@ -32,5 +33,6 @@ p <- ggplot2::ggplot(top, ggplot2::aes(HR, stats::reorder(gene, HR))) +
   ggplot2::scale_x_continuous(trans = "log2") +
   ggplot2::labs(x = "HR per SD", y = NULL, title = paste0(TRAIN_COHORT, " — transporter Cox")) +
   theme_paper()
+p
 ggplot2::ggsave(file.path(DIR_FIGURES, "Fig2C_forest_univariate.pdf"), p, width = 6, height = 6)
 message("완료: LASSO/Cox signature")

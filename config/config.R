@@ -25,6 +25,7 @@ ARG_ENZYME_SET <- c("GOBP_ARGININE_METABOLIC_PROCESS",
                     "GOBP_L_ARGININE_BIOSYNTHETIC_PROCESS",
                     "GOBP_L_ARGININE_CATABOLIC_PROCESS")
 
+
 # ── 디렉터리 / Directories (all relative to project root) ────────────────────
 DIR_DATA_RAW   <- here("data", "raw")        # 원본 데이터 (git 미추적)
 DIR_DATA_PROC  <- here("data", "processed")  # 중간 산출 CSV/RData (git 미추적)
@@ -121,7 +122,7 @@ ROC_TIMES    <- c(12, 36, 60)
 # ── 단일세포: donor 수준 분석 ────────────────────────────────────────────────
 SC_DONOR_MIN_CELLS <- 20
 AUCELL_SEED        <- 42
-DEPTH_COVARIATE    <- "nCount_RNA"
+DEPTH_COVARIATE    <- "DEPTH" #"DEPTH" <- log1p("nCount_RNA")
 CELLCHAT_SUBSAMPLE <- 20000
 SC_BATCH_CANDIDATES <- c("dataset","author","study","batch","sample_source")
 

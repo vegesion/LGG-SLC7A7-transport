@@ -19,7 +19,7 @@ BP    <- file.path(DIR_DATA_PROC, "gbmap_bpcells")          # 온디스크 행�
 h5ad  <- require_data(basename(PATH_H5AD))                  # 원본 h5ad 경로
 
 # open_matrix_dir + 방향정렬 + SYMBOL + obs 전체 + UMAP + NormalizeData 를 한 번에
-seu <- load_gbmap_bpcells(BP, h5ad, normalize = TRUE)
+seu <- load_gbmap_bpcells(BP, h5ad)
 stopifnot(GENE_OF_INTEREST %in% rownames(seu))
 print(colnames(seu@meta.data))
 print(table(seu$cell_type))
